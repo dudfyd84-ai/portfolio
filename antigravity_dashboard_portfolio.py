@@ -158,10 +158,12 @@ def load_anonymized_portfolio_data():
     """
     import json
     json_path = 'scratch/portfolio_data.json'
-    
+    if not os.path.exists(json_path):
+        json_path = 'portfolio_data.json'
+        
     if not os.path.exists(json_path):
         # 만약 로컬에 파일이 없을 경우 비상용 가상 Mock 데이터를 생성
-        st.error(f"⚠️ 포트폴리오 데이터셋 파일({json_path})을 찾을 수 없습니다. 기본 목업을 생성합니다.")
+        st.error(f"⚠️ 포트폴리오 데이터셋 파일(portfolio_data.json)을 찾을 수 없습니다. 기본 목업을 생성합니다.")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
         
     with open(json_path, 'r', encoding='utf-8') as f:
@@ -1341,8 +1343,19 @@ else:
 
 # --- 사이드바: 컨트롤러 & 실시간 시뮬레이션 설정 ---
 with st.sidebar:
-    # 다니엘트루스 공식 로고 이미지 렌더링 (사이드바 상단 배치)
-    st.image("daniels_truth_logo.png", use_container_width=True)
+    # 브랜드 로고 이미지 렌더링 (파일이 존재하는 경우에만 로드, 없으면 고급스러운 텍스트 타이틀로 대체)
+    if os.path.exists("daniels_truth_logo.png"):
+        st.image("daniels_truth_logo.png", use_container_width=True)
+    else:
+        st.markdown(
+            """
+            <div style='text-align: center; padding: 12px; border: 2px solid #C5A880; border-radius: 6px; background-color: #1a1a1a; margin-bottom: 10px;'>
+                <h2 style='color: #C5A880; margin: 0; font-family: "Outfit", sans-serif; font-weight: 700; letter-spacing: 2px; font-size: 1.5rem;'>LUXURY SCM</h2>
+                <span style='color: #888888; font-size: 0.8rem; letter-spacing: 1px; font-weight: 500;'>PORTFOLIO EDITION</span>
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
     
     st.markdown("<hr style='border: 1px solid #C5A880; margin-top: 10px; margin-bottom: 15px;'/>", unsafe_allow_html=True)
     
