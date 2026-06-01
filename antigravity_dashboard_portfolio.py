@@ -246,6 +246,8 @@ def load_google_sojin_data_v6(quantity_df):
         'sale_date': '날짜',
         'quantity': '수량'
     }).copy()
+    # 캐싱 및 직렬화 과정에서 날짜 컬럼의 데이터 타입이 유실될 가능성에 대비하여 명시적 변환
+    df_sales['날짜'] = pd.to_datetime(df_sales['날짜'], errors='coerce')
     df_sales['날짜'] = df_sales['날짜'].dt.strftime('%Y.%m.%d')
     df_sales['품명_clean'] = df_sales['품명']
     
@@ -262,15 +264,16 @@ def generate_fallback_mrp_data(prod_code_map):
     # 1. 가상 제품 마스터 구축 및 카테고리 분류
     product_records = []
     def classify_category(p_name):
-        if p_name.startswith("[증정]") or p_name.startswith("[샘플]"):
+        p_name_upper = str(p_name).upper()
+        if "SP_MOCK" in p_name_upper or "[증정]" in p_name_upper or "[샘플]" in p_name_upper:
             return "증정"
-        elif "디퓨저" in p_name:
+        elif "PD_DF" in p_name_upper or "디퓨저" in p_name_upper:
             return "디퓨저"
-        elif "오일" in p_name:
+        elif "PD_OIL" in p_name_upper or "오일" in p_name_upper or "퍼퓸" in p_name_upper:
             return "오일 퍼퓸"
-        elif "캔들" in p_name:
+        elif "PD_CD" in p_name_upper or "캔들" in p_name_upper:
             return "캔들"
-        elif "[액세서리]" in p_name or "스틱" in p_name or "캡" in p_name:
+        elif "PD_AC" in p_name_upper or "액세서리" in p_name_upper or "스틱" in p_name_upper or "나무" in p_name_upper:
             return "액세서리"
         else:
             return "기타"
@@ -391,6 +394,9 @@ def load_google_mrp_data(prod_code_map):
     정밀 전처리 및 품명 매칭을 수행하고, 대시보드 스타 스키마에 호환되는
     plan_df와 bom_df 데이터프레임을 생성하여 반환합니다.
     """
+    # ⚡ [PORTFOLIO EDITION] 실시간 구글 조회 배제 및 로컬 가상 MRP 데이터 연동 (Short-circuit)
+    plan_df, bom_df, _ = generate_fallback_mrp_data(prod_code_map)
+    return plan_df, bom_df, prod_code_map
     import re
     # 1. 생산 계획 탭 파싱
     try:
@@ -630,6 +636,8 @@ def load_google_sojin_data_v6_DEPRECATED(_quantity_df):
             'sale_date': '날짜',
             'quantity': '수량'
         })
+        # 직렬화/역직렬화에 따른 날짜 데이터 타입 유실 대비 방어코드
+        df_sales['날짜'] = pd.to_datetime(df_sales['날짜'], errors='coerce')
         df_sales['날짜'] = df_sales['날짜'].dt.strftime('%Y.%m.%d')
         df_sales['품명'] = df_sales['품명'].astype(str).str.strip()
         df_sales = df_sales[~df_sales['품명'].str.contains(pattern, case=False, na=False)]
@@ -781,6 +789,36 @@ def load_google_sales_data():
     구글 스프레드시트의 매출액 탭('25년 매출', '26년 매출') 및 판매량 탭('25년 판매', '26년 판매') 데이터를
     각각 로드하고 이중 데이터 파이프라인(Dual Data Pipeline) 구조로 전처리하여 반환합니다.
     """
+    # ⚡ [PORTFOLIO EDITION] 실시간 구글 조회 배제 및 로컬 비식별 데이터 강제 리턴 (Short-circuit)
+    sales_raw, qty_raw, _ = load_anonymized_portfolio_data()
+    
+    unique_stores = sorted(list(sales_raw['store_name'].unique()))
+    store_code_map = {name: name for name in unique_stores}
+    sales_raw['store_code'] = sales_raw['store_name']
+    sales_raw['sale_id'] = sales_raw.index.map(lambda idx: f"S_SAL_{idx+1:06d}")
+    
+    unique_products = sorted(list(qty_raw['product_name'].unique()))
+    prod_code_map = {name: name for name in unique_products}
+    qty_raw['product_code'] = qty_raw['product_name']
+    qty_raw['sale_detail_id'] = qty_raw.index.map(lambda idx: f"S_QTY_{idx+1:06d}")
+    
+    def classify_category(p_name):
+        p_name_upper = str(p_name).upper()
+        if "SP_MOCK" in p_name_upper:
+            return "증정"
+        elif "PD_DF" in p_name_upper or "디퓨저" in p_name_upper:
+            return "디퓨저"
+        elif "PD_OIL" in p_name_upper or "오일" in p_name_upper or "퍼퓸" in p_name_upper:
+            return "오일 퍼퓸"
+        elif "PD_CD" in p_name_upper or "캔들" in p_name_upper:
+            return "캔들"
+        elif "PD_AC" in p_name_upper or "액세서리" in p_name_upper or "스틱" in p_name_upper or "나무" in p_name_upper:
+            return "액세서리"
+        else:
+            return "기타"
+            
+    qty_raw['category'] = qty_raw['product_name'].apply(classify_category)
+    return sales_raw, qty_raw, store_code_map, prod_code_map
     # ==========================================
     # 1. 실제 매출 데이터 (sales_df) 로드 및 전처리
     # ==========================================
@@ -1455,7 +1493,7 @@ if selected_product != "전체":
 # --- 메인 화면 헤더 ---
 row_header = st.columns([3, 1])
 with row_header[0]:
-    st.title("다니엘트루스 대시보드")
+    st.title("📊 LUXURY SCM 실시간 SCM 대시보드")
 
 with row_header[1]:
     st.markdown("""
